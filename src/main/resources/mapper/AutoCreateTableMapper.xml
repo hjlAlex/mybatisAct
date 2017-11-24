@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.wabao.dao.AutoCreateTableDao">
+
+	<!-- 抽取出来的公共部分 -->
+	<sql id="commonSql">
+		<if test="field.fileTypeLength == 0">
+			`${field.fieldName}` ${field.fieldType} 
+		</if>
+		<if test="field.fileTypeLength == 1">
+			`${field.fieldName}` ${field.fieldType}(${field.fieldLength}) 
+		</if>
+		<if test="field.fileTypeLength == 2">
+			`${field.fieldName}` ${field.fieldType}(${field.fieldLength},${field.fieldDecimalLength}) 
+		</if>
+		<if test="field.fieldIsNull">
+			NULL 
+		</if>
+		<if test="!field.fieldIsNull">
+			NOT NULL 
+		</if>
+		<if test="field.fieldIsAutoIncrement">
+			AUTO_INCREMENT 
+		</if>
+		<!-- 不是自增长的才能有默认值 -->
+		<!-- 并且不为null时，因为null是默认的没必要写 -->
+		<if test="!field.fieldIsAutoIncrement and !field.fieldIsNull and field.fieldDefaultValue != 'NULL'">
+			DEFAULT #{field.fieldDefaultValue} 
+		</if>
+		<!-- 不是自增长的才能有默认值 -->
+		<!-- 不是非空时，并且默认值不是NUll -->
+		<if test="!field.fieldIsAutoIncrement and field.fieldIsNull and field.fieldDefaultValue != 'NULL'">
+			DEFAULT #{field.fieldDefaultValue} 
+		</if>
+	</sql>
+
+	<!-- 创建表的 -->
+	<insert id="createTable" parameterType="map">
+
+		<foreach collection="tableMap" index="tableName" item="fields">
+			create table `${tableName}`(
+			<foreach collection="fields" item="field" separator=",">
+				<include refid="commonSql"></include>
+				<if test="field.fieldIsKey">
+					,PRIMARY KEY (`${field.fieldName}`)
+				</if>
+				<if test="field.fieldIsUnique">
+					,UNIQUE KEY (`${field.fieldName}`)
+				</if>
+			</foreach>
+			)ENGINE=InnoDB DEFAULT CHARSET=utf8;
+		</foreach>
+
+	</insert>
+	
+	<!-- 验证表是否存在 -->
+	<select id="findTableCountByTableName" resultType="int">
+		select count(1) from information_schema.tables
+		where table_schema = #{tableSchema} and table_name = #{tableName}
+	</select>
+	
+	<!-- 根据表名查询表的结构 -->
+	<select id="findTableEnsembleByTableName" resultType="com.wabao.autocreate.SysMysqlColumns">
+		select * from information_schema.columns where table_schema = #{tableSchema} and table_name = #{tableName}
+	</select>	
+	
+	<!-- 增加字段 -->
+	<update id="addTableField" parameterType="map">
+	
+		<foreach collection="tableMap" index="tableName" item="field" separator=";">
+			alter table `${tableName}` add column
+			<include refid="commonSql"></include>
+			<if test="field.fieldIsKey">
+				PRIMARY KEY 
+			</if>
+			<if test="field.fieldIsUnique">
+				UNIQUE KEY 
+			</if>
+		</foreach>
+		
+	</update>
+	
+	<!-- 删除字段 -->
+	<delete id="removeTableField" parameterType="map">
+	
+		<foreach collection="tableMap" index="tableName" item="field" separator=";">
+			alter table `${tableName}` drop column `${field}`
+		</foreach>
+		
+	</delete>
+	
+	<!-- 修改字段 -->
+	<update id="modifyTableField" parameterType="map">
+	
+		<foreach collection="tableMap" index="tableName" item="field" separator=";">
+				alter table `${tableName}` modify column
+				<include refid="commonSql"></include>
+				<if test="field.fieldIsKey and field.needPrivateKeyOnAlterSql">
+					PRIMARY KEY 
+				</if>
+				<if test="field.fieldIsUnique and field.needUniqueKeyOnAlterSql">
+					UNIQUE KEY 
+				</if>
+		</foreach>
+		
+	</update>
+	
+	
+	<!-- 删除主键字段 -->
+	<delete id="dropKeyTableField" parameterType="map">
+	
+		<foreach collection="tableMap" index="tableName" item="field" separator=";">
+				alter table `${tableName}` modify 
+				<include refid="commonSql"></include>
+				,drop primary key
+		</foreach>
+		
+	</delete>
+	
+	<!-- 删除唯一约束 -->
+	<delete id="dropUniqueTableField" parameterType="map">
+	
+		<foreach collection="tableMap" index="tableName" item="field" separator=";">
+				alter table `${tableName}` DROP INDEX `${field.fieldName}`
+		</foreach>
+		
+	</delete>
+	
+	<!-- 删除表 -->
+	<delete id="dorpTableByName" parameterType="string">
+		DROP TABLE IF EXISTS `${tableName}`;
+	</delete>
+</mapper>
